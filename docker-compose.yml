@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # Databases
+  postgres:
+    image: postgres:15-alpine
+    container_name: propertyos-postgres
+    environment:
+      POSTGRES_DB: propertyos
+      POSTGRES_USER: propertyos
+      POSTGRES_PASSWORD: propertyos123
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - propertyos-network
+
+  mongodb:
+    image: mongo:6-jammy
+    container_name: propertyos-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: propertyos
+      MONGO_INITDB_ROOT_PASSWORD: propertyos123
+      MONGO_INITDB_DATABASE: propertyos
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - propertyos-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: propertyos-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      - propertyos-network
+
+  # API Gateway
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: propertyos-gateway
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://propertyos:propertyos123@postgres:5432/propertyos
+      - MONGODB_URL=mongodb://propertyos:propertyos123@mongodb:27017/propertyos
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=propertyos-development-secret-key
+      - JWT_EXPIRES_IN=24h
+    depends_on:
+      - postgres
+      - mongodb
+      - redis
+    networks:
+      - propertyos-network
+    volumes:
+      - ./gateway:/app
+      - /app/node_modules
+
+  # Property Service
+  property-service:
+    build:
+      context: ./services/property-service
+      dockerfile: Dockerfile
+    container_name: propertyos-property-service
+    ports:
+      - '3002:3002'
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://propertyos:propertyos123@postgres:5432/propertyos
+      - PORT=3002
+    depends_on:
+      - postgres
+    networks:
+      - propertyos-network
+    volumes:
+      - ./services/property-service:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  redis_data:
+
+networks:
+  propertyos-network:
+    driver: bridge
